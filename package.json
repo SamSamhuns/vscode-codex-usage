@@ -1,8 +1,8 @@
 {
   "name": "vscode-codex-usage",
-  "displayName": "Codex Usage",
+  "displayName": "Codex & Claude Usage",
   "description": "Show Codex CLI and Claude Code usage side by side in the VS Code status bar.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "samsamhuns",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -44,31 +44,37 @@
     "commands": [
       {
         "command": "codexUsage.refresh",
-        "title": "Codex Usage: Refresh"
+        "category": "Codex & Claude Usage",
+        "title": "Refresh"
       },
       {
         "command": "codexUsage.showUsage",
-        "title": "Codex Usage: Show Usage"
+        "category": "Codex & Claude Usage",
+        "title": "Show Codex Usage"
       },
       {
         "command": "codexUsage.showMoreInformation",
-        "title": "Codex Usage: Show More Information"
+        "category": "Codex & Claude Usage",
+        "title": "Show Codex More Information"
       },
       {
         "command": "codexUsage.openSessionsFolder",
-        "title": "Codex Usage: Open Sessions Folder"
+        "category": "Codex & Claude Usage",
+        "title": "Open Codex Sessions Folder"
       },
       {
         "command": "codexUsage.showClaudeUsage",
-        "title": "Codex Usage: Show Claude Code Usage"
+        "category": "Codex & Claude Usage",
+        "title": "Show Claude Code Usage"
       },
       {
         "command": "codexUsage.showClaudeMoreInformation",
-        "title": "Codex Usage: Show Claude Code More Information"
+        "category": "Codex & Claude Usage",
+        "title": "Show Claude Code More Information"
       }
     ],
     "configuration": {
-      "title": "Codex Usage",
+      "title": "Codex & Claude Usage",
       "properties": {
         "codexUsage.source": {
           "type": "string",
@@ -90,6 +96,16 @@
           "type": "boolean",
           "default": false,
           "description": "Show remaining usage (\"% left\", counting down from 100%) instead of used usage, like the Codex CLI."
+        },
+        "codexUsage.colorIndicators": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a coloured dot (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up) next to each usage window in the status bar and usage menu. Turn off for plain text."
+        },
+        "codexUsage.warningBackground": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also colour the whole status bar item with the theme's warning background at 75% used and its error (red) background at 90%. Off by default, since the coloured dots already show each window's level."
         },
         "codexUsage.statusBarAlignment": {
           "type": "string",

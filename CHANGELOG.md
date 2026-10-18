@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0
+
+- Rename the extension to **Codex & Claude Usage**, with a new icon showing both
+  logos above two usage meters. The extension id
+  (`samsamhuns.vscode-codex-usage`), command ids, and `codexUsage.*` settings
+  are unchanged, so this installs over 0.3.0 and keeps your settings. Commands
+  now appear as "Codex & Claude Usage: …", and the Codex ones say "Codex".
+- Make usage easier to read at a glance with colour:
+  - **Status bar:** a coloured dot before each window, graded by how much is
+    used (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up). The text
+    keeps the theme's own colour, and the dots replace the `|` separator.
+  - **Hover:** light pastel badges for the provider (Codex teal, Claude
+    terracotta) and for each window's `% used`, with dark text at 10:1
+    contrast or better; lighter bars coloured by the same levels; and a dimmed
+    "Resets in 2h 9m · Sat, Oct 18, 2:10 PM" line with the countdown.
+  - **Usage menu:** the same coloured dots, and the countdown in each reset line.
+- The status bar no longer turns the whole item yellow/red at 75%/90% used,
+  which was distracting while a limit stayed high; the dots show the level
+  instead. Turn it back on with `codexUsage.warningBackground`.
+- A Claude per-model weekly cap (e.g. Opus) now joins the status bar text once
+  it reaches 75%, so it is visible without hovering.
+- Add `codexUsage.colorIndicators` (default on) to turn the dots off for the
+  previous plain look.
+
 ## 0.3.0
 
 - Add **Claude Code usage** side by side with Codex. A second status bar

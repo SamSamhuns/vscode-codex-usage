@@ -13,7 +13,7 @@ import {
   StatusBarSide,
   UsageProvider,
 } from "./statusBar";
-import { setShowRemaining } from "./format";
+import { setColorIndicators, setShowRemaining } from "./format";
 import { Snapshot } from "./types";
 
 type UsageSource = "auto" | "api" | "rollout";
@@ -26,6 +26,7 @@ const CODEX: UsageProvider = {
   showUsageCommand: "codexUsage.showUsage",
   moreInformationCommand: "codexUsage.showMoreInformation",
   emptyTooltip: "No Codex usage data. Start a Codex session or run 'codex login'.",
+  accent: { background: "#9de5cf", foreground: "#1f2328" },
   includeAdditionalLimits: false,
 };
 
@@ -38,6 +39,7 @@ const CLAUDE: UsageProvider = {
   moreInformationCommand: "codexUsage.showClaudeMoreInformation",
   emptyTooltip:
     "No Claude Code usage fetched yet. It is fetched while a VS Code window is focused.",
+  accent: { background: "#f5c2ad", foreground: "#1f2328" },
   // Claude reports per-model weekly caps (e.g. Opus) as rows of their own, and
   // they can be the binding limit, so chart them with the 5h and weekly windows.
   includeAdditionalLimits: true,
@@ -66,6 +68,8 @@ function getConfig() {
     source: (["auto", "api", "rollout"].includes(source) ? source : "auto") as UsageSource,
     compact: c.get<boolean>("compactStatusBar", false),
     showRemaining: c.get<boolean>("showRemaining", false),
+    colorIndicators: c.get<boolean>("colorIndicators", true),
+    warningBackground: c.get<boolean>("warningBackground", false),
     statusBarAlignment: (side === "right" ? "right" : "left") as StatusBarSide,
     claudeEnabled: c.get<boolean>("claude.enabled", true),
     claudeRefreshIntervalSeconds: c.get<number>("claude.refreshIntervalSeconds", 300),
@@ -115,7 +119,11 @@ async function refreshCodex(cfg: Config) {
     lastNote = undefined;
     console.error("[codex-usage] read failed:", err);
   }
-  statusBar.update(lastSnapshot, { compact: cfg.compact, note: lastNote });
+  statusBar.update(lastSnapshot, {
+    compact: cfg.compact,
+    note: lastNote,
+    warningBackground: cfg.warningBackground,
+  });
 }
 
 // Cheap on most ticks: the service re-reads the usage state shared by all
@@ -144,12 +152,17 @@ async function refreshClaude(cfg: Config = getConfig(), force = false) {
     claudeBar.hide();
     return;
   }
-  claudeBar.update(lastClaude.snapshot, { compact: cfg.compact, note: lastClaude.note });
+  claudeBar.update(lastClaude.snapshot, {
+    compact: cfg.compact,
+    note: lastClaude.note,
+    warningBackground: cfg.warningBackground,
+  });
 }
 
 async function refresh(force = false) {
   const cfg = getConfig();
   setShowRemaining(cfg.showRemaining);
+  setColorIndicators(cfg.colorIndicators);
   await Promise.all([refreshCodex(cfg), refreshClaude(cfg, force)]);
 }
 

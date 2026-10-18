@@ -17,6 +17,29 @@ export function formatPercent(usedPercent: number, withDescription: boolean = tr
   return `${Math.round(p)}%${withDescription ? (showRemaining ? " remaining" : " used") : ""}`;
 }
 
+let colorIndicators = true;
+
+// When enabled, each usage window gets a coloured dot (🟢 🟡 🟠 🔴) graded by
+// its used percent, in the status bar and the usage menu.
+export function setColorIndicators(value: boolean) {
+  colorIndicators = value;
+}
+
+export function colorIndicatorsEnabled(): boolean {
+  return colorIndicators;
+}
+
+// "Sat, Oct 18, 2:10 PM": quicker to scan than a full toLocaleString().
+export function formatResetMoment(date: Date): string {
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function formatDuration(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds)) return "unknown";
   if (totalSeconds <= 0) return "0m";

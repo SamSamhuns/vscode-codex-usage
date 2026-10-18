@@ -17,7 +17,7 @@ charts, multi-account, notifications/alerts.
 
 Show Claude Code's **5-hour session** and **weekly** plan limits in a second
 status bar item, immediately right of the Codex item (same alignment,
-fractionally lower priority), with its own tooltip, menus, and warning colour.
+fractionally lower priority), with its own tooltip, menus, and colour dots.
 
 - **Source:** `GET https://api.anthropic.com/api/oauth/usage` (the endpoint
   behind Claude Code's `/usage`) with the claude.ai OAuth token Claude Code
@@ -81,11 +81,14 @@ Edge cases to handle:
 $(pulse) Codex 12% · 4h59m | Week 22% · 4d 2h
 ```
 
-Color: default until `used_percent >= 75` (warning), `>= 90` (error)
-via `backgroundColor`, using the highest visible limit.
+Color: each window gets a coloured dot (🟢 <50, 🟡 <75, 🟠 <90, 🔴 90+),
+toggled by `codexUsage.colorIndicators`. Since 0.4.0 the item keeps the normal
+status bar background; the old warning (`>= 75`) / error (`>= 90`)
+`backgroundColor` is opt-in via `codexUsage.warningBackground`.
 
-Tooltip: current-session and weekly text bars plus localized reset dates.
-Extra metadata stays behind a **More information** link.
+Tooltip: current-session and weekly bars (light colours, by the same levels)
+with a pastel `% used` badge and a `Resets in … · <date>` line. Extra metadata
+stays behind a **More information** link.
 
 Click → opens a native VS Code quick-pick style summary with both meters.
 Selecting **More information** shows captured time, source file, and window

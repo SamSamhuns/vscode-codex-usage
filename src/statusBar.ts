@@ -14,11 +14,17 @@ export interface StatusBarOptions {
   compact?: boolean;
   // Optional status line (e.g. a fallback explanation) surfaced in the tooltip.
   note?: string;
+  // Also colour the whole item with the theme's warning/error background at
+  // 75%/90% used. Off by default: an always-red item is distracting, and the
+  // coloured dots already show each window's level.
+  warningBackground?: boolean;
 }
 import {
+  colorIndicatorsEnabled,
   formatPercent,
   displayPercent,
   formatDuration,
+  formatResetMoment,
   getResetDisplay,
   windowLongLabel,
   windowShortLabel,
@@ -40,6 +46,8 @@ export interface UsageProvider {
   moreInformationCommand: string;
   // Tooltip while there is no snapshot.
   emptyTooltip: string;
+  // Colours of the provider's name badge in the hover header.
+  accent: { background: string; foreground: string };
   // Treat `additional_limits` (e.g. per-model weekly caps) like the main
   // windows: charted in the hover and usage menu, and counted for the compact
   // percent and warning colour. Otherwise they appear in More information only.
@@ -51,6 +59,8 @@ interface LabeledWindow {
   window: RateLimitWindow;
   shortLabel: string;
   longLabel: string;
+  // Label in the status bar text, e.g. "5h" or "Opus weekly".
+  statusLabel: string;
 }
 
 // Codex only reports the windows that apply to the account: some plans get a
@@ -62,11 +72,13 @@ function collectWindows(snapshot: Snapshot): LabeledWindow[] {
   for (const slot of slots) {
     const window = snapshot.rateLimits[slot];
     if (!window) continue;
+    const shortLabel = windowShortLabel(window, slot);
     out.push({
       slot,
       window,
-      shortLabel: windowShortLabel(window, slot),
+      shortLabel,
       longLabel: windowLongLabel(window, slot),
+      statusLabel: shortLabel,
     });
   }
   return out;
@@ -83,14 +95,16 @@ function chartedWindows(snapshot: Snapshot, provider: UsageProvider): LabeledWin
       return window ? [{ slot, window }] : [];
     });
     for (const { slot, window } of present) {
+      const shortLabel = windowShortLabel(window, slot);
       out.push({
         slot,
         window,
-        shortLabel: windowShortLabel(window, slot),
+        shortLabel,
         longLabel:
           present.length > 1
             ? `${limit.limit_name} · ${windowLongLabel(window, slot)}`
             : `${limit.limit_name} limit`,
+        statusLabel: present.length > 1 ? `${limit.limit_name} ${shortLabel}` : limit.limit_name,
       });
     }
   }
@@ -102,12 +116,46 @@ function windowIcon(shortLabel: string): string {
 }
 
 const TEXT_BAR_WIDTH = 16;
-const SVG_BAR_WIDTH = 180;
-const SVG_BAR_HEIGHT = 10;
-const SVG_BAR_RADIUS = 5;
-const USAGE_COLOR_DEFAULT = "#0078d4";
-const USAGE_COLOR_WARNING = "#cca700";
-const USAGE_COLOR_ERROR = "#f14c4c";
+const SVG_BAR_WIDTH = 220;
+const SVG_BAR_HEIGHT = 12;
+const SVG_BAR_RADIUS = 6;
+
+type UsageLevel = "low" | "medium" | "high" | "critical";
+
+interface LevelStyle {
+  // Status bar / menu indicator, and the codicon used when dots are off.
+  dot: string;
+  icon: string;
+  // Hover bar fill: light tones, outlined so they still read on light hovers.
+  bar: string;
+  // Hover percent badge: pastel background with dark text (10:1 or better).
+  badgeBackground: string;
+  badgeForeground: string;
+}
+
+const BADGE_TEXT = "#1f2328";
+
+const LEVEL_STYLES: Record<UsageLevel, LevelStyle> = {
+  low: { dot: "🟢", icon: "$(circle-filled)", bar: "#4ac26b", badgeBackground: "#aceebb", badgeForeground: BADGE_TEXT },
+  medium: { dot: "🟡", icon: "$(circle-filled)", bar: "#eac54f", badgeBackground: "#f8e3a1", badgeForeground: BADGE_TEXT },
+  high: { dot: "🟠", icon: "$(warning)", bar: "#ffa657", badgeBackground: "#ffd8b5", badgeForeground: BADGE_TEXT },
+  critical: { dot: "🔴", icon: "$(error)", bar: "#ff8182", badgeBackground: "#ffcecb", badgeForeground: BADGE_TEXT },
+};
+
+// Graded by used percent, whatever `showRemaining` displays. 75 and 90 match the
+// optional warning and error backgrounds; 50 adds an earlier heads-up.
+function usageLevel(usedPercent: number): UsageLevel {
+  const pct = clampPercent(usedPercent);
+  if (pct >= 90) return "critical";
+  if (pct >= 75) return "high";
+  if (pct >= 50) return "medium";
+  return "low";
+}
+
+// "🟢 " before a window's text, or nothing when colour indicators are off.
+function levelDot(usedPercent: number): string {
+  return colorIndicatorsEnabled() ? `${LEVEL_STYLES[usageLevel(usedPercent)].dot} ` : "";
+}
 
 export type StatusBarSide = "left" | "right";
 
@@ -177,13 +225,21 @@ export class StatusBar {
     } else if (compact || windows.length === 0) {
       this.item.text = formatCompactText(compact ? icon : `${icon} ${name}`, charted);
     } else {
-      const segments = windows.map((w) => formatStatusSegment(w.shortLabel, w.window, snapshot));
-      this.item.text = `${icon} ${name} ${segments.join(" | ")}`;
+      // An additional limit joins the text once it reaches 75% (🟠), so a
+      // per-model cap close to running out is visible without hovering.
+      const alerts = charted.slice(windows.length).filter((w) => (w.window.used_percent ?? 0) >= 75);
+      const segments = [...windows, ...alerts].map((w) =>
+        formatStatusSegment(w.statusLabel, w.window, snapshot),
+      );
+      // The coloured dots already separate the segments.
+      this.item.text = `${icon} ${name} ${segments.join(colorIndicatorsEnabled() ? "  " : " | ")}`;
     }
     this.item.tooltip = renderUsageTooltip(this.provider, snapshot, charted, options.note);
 
     const highestPercent = charted.reduce((max, w) => Math.max(max, w.window.used_percent ?? 0), 0);
-    if (highestPercent >= 90) {
+    if (!options.warningBackground) {
+      this.item.backgroundColor = undefined;
+    } else if (highestPercent >= 90) {
       this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
     } else if (highestPercent >= 75) {
       this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
@@ -399,9 +455,12 @@ function renderUsageTooltip(
   note?: string,
 ): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
+  // Only for the coloured <span> badges; every dynamic string is escaped.
+  md.supportHtml = true;
   md.isTrusted = { enabledCommands: [provider.moreInformationCommand] };
 
-  md.appendMarkdown(`**${provider.name} usage** · ${sourceLabel(snapshot)}\n\n`);
+  const name = badge(provider.name, provider.accent.foreground, provider.accent.background);
+  md.appendMarkdown(`${name} **usage** · ${sourceLabel(snapshot)}\n\n`);
   if (windows.length === 0) {
     md.appendMarkdown("No rate-limit windows reported\n");
   } else {
@@ -411,7 +470,7 @@ function renderUsageTooltip(
     });
   }
   if (note) {
-    md.appendMarkdown(`\n\n$(info) ${escapeMarkdownAltText(note)}`);
+    md.appendMarkdown(`\n\n$(info) ${escapeText(note)}`);
   }
   md.appendMarkdown(`\n\n[More information](command:${provider.moreInformationCommand})`);
 
@@ -424,12 +483,13 @@ function sourceLabel(snapshot: Snapshot): string {
 }
 
 // Compact chip: icon + the single highest-used window percent, so the number
-// always matches the warning/error background colour.
+// always matches its dot (and the optional warning/error background).
 function formatCompactText(prefix: string, windows: LabeledWindow[]): string {
   const top = windows.reduce((a, b) =>
     (b.window.used_percent ?? 0) > (a.window.used_percent ?? 0) ? b : a,
   );
-  return `${prefix} ${formatPercent(clampPercent(top.window.used_percent), false)}`;
+  const pct = clampPercent(top.window.used_percent);
+  return `${prefix} ${levelDot(pct)}${formatPercent(pct, false)}`;
 }
 
 function appendUsageWindow(
@@ -438,11 +498,13 @@ function appendUsageWindow(
   window: RateLimitWindow,
   snapshot: Snapshot,
 ) {
-  md.appendMarkdown(`**${label}**\n\n`);
   const pct = clampPercent(window.used_percent);
-  md.appendMarkdown(`**${formatPercent(pct)}**\n\n`)
+  const style = LEVEL_STYLES[usageLevel(pct)];
+  md.appendMarkdown(
+    `**${escapeText(label)}** ${badge(formatPercent(pct), style.badgeForeground, style.badgeBackground)}\n\n`,
+  );
   md.appendMarkdown(`${formatSvgBar(pct, `${label} usage ${formatPercent(pct)}`)}\n\n`);
-  md.appendMarkdown(`Resets ${formatResetDate(window, snapshot)}`);
+  md.appendMarkdown(muted(`Resets ${formatResetWhen(window, snapshot)}`));
 }
 
 function createUsageQuickPickItem(
@@ -454,14 +516,14 @@ function createUsageQuickPickItem(
   return {
     label: `${label} ${formatPercent(pct)}`,
     description: formatTextBar(pct),
-    detail: `Resets ${formatResetDate(window, snapshot)}`,
+    detail: `Resets ${formatResetWhen(window, snapshot)}`,
   };
 }
 
 function formatStatusSegment(label: string, window: RateLimitWindow, snapshot: Snapshot): string {
   const reset = getResetDisplay(window, snapshot.capturedAt);
   const resetDuration = reset ? formatDuration(reset.secondsRemaining) : "unknown";
-  return `${label} ${formatPercent(window.used_percent, false)} · ${resetDuration}`;
+  return `${levelDot(window.used_percent)}${label} ${formatPercent(window.used_percent, false)} · ${resetDuration}`;
 }
 
 function formatWindowLength(window: RateLimitWindow | null): string {
@@ -472,47 +534,56 @@ function formatWindowLength(window: RateLimitWindow | null): string {
   return `${window.window_minutes} min`;
 }
 
-function formatResetDate(window: RateLimitWindow, snapshot: Snapshot): string {
+// "in 2h 9m · Sat, Oct 18, 2:10 PM": the countdown first, then the moment.
+function formatResetWhen(window: RateLimitWindow, snapshot: Snapshot): string {
   const reset = getResetDisplay(window, snapshot.capturedAt);
-  return reset ? reset.resetAt.toLocaleString() : "unknown";
+  if (!reset) return "unknown";
+  return `in ${formatDuration(reset.secondsRemaining)} · ${formatResetMoment(reset.resetAt)}`;
 }
 
 function formatTextBar(percent: number): string {
   const pct = clampPercent(percent);
   const shown = displayPercent(pct);
   const filled = shown > 0 ? Math.max(1, Math.round((shown / 100) * TEXT_BAR_WIDTH)) : 0;
-  return `${getUsageIcon(pct)} ${"█".repeat(filled)}${"░".repeat(TEXT_BAR_WIDTH - filled)}`;
+  const style = LEVEL_STYLES[usageLevel(pct)];
+  const indicator = colorIndicatorsEnabled() ? style.dot : style.icon;
+  return `${indicator} ${"█".repeat(filled)}${"░".repeat(TEXT_BAR_WIDTH - filled)}`;
 }
 
 function formatSvgBar(percent: number, altText: string): string {
   const pct = clampPercent(percent);
   const fillWidth = Math.round((displayPercent(pct) / 100) * SVG_BAR_WIDTH);
-  const fillColor = getUsageColor(pct);
+  const fillColor = LEVEL_STYLES[usageLevel(pct)].bar;
+  // A translucent grey track reads on both dark and light hover backgrounds.
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" viewBox="0 0 ${SVG_BAR_WIDTH} ${SVG_BAR_HEIGHT}">`,
-    `<rect width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" rx="${SVG_BAR_RADIUS}" fill="#2d2d30"/>`,
+    `<rect width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" rx="${SVG_BAR_RADIUS}" fill="#8b949e" fill-opacity="0.25"/>`,
     `<rect width="${fillWidth}" height="${SVG_BAR_HEIGHT}" rx="${SVG_BAR_RADIUS}" fill="${fillColor}"/>`,
-    `<rect x="0.5" y="0.5" width="${SVG_BAR_WIDTH - 1}" height="${SVG_BAR_HEIGHT - 1}" rx="${SVG_BAR_RADIUS - 0.5}" fill="none" stroke="#6e7681" stroke-opacity="0.8"/>`,
+    `<rect x="0.5" y="0.5" width="${SVG_BAR_WIDTH - 1}" height="${SVG_BAR_HEIGHT - 1}" rx="${SVG_BAR_RADIUS - 0.5}" fill="none" stroke="#8b949e" stroke-opacity="0.6"/>`,
     "</svg>",
   ].join("");
   const encoded = Buffer.from(svg).toString("base64");
-  return `![${escapeMarkdownAltText(altText)}](data:image/svg+xml;base64,${encoded})`;
+  return `![${escapeText(altText)}](data:image/svg+xml;base64,${encoded})`;
 }
 
-function escapeMarkdownAltText(text: string): string {
-  return text.replace(/[[\]\\]/g, "\\$&");
+// A coloured label in the hover. VS Code keeps a <span> style only in this
+// exact `color:…;background-color:…;` form, so keep it that way.
+function badge(text: string, foreground: string, background: string): string {
+  return `<span style="color:${foreground};background-color:${background};">&nbsp;${escapeText(text)}&nbsp;</span>`;
 }
 
-function getUsageColor(percent: number): string {
-  if (percent >= 90) return USAGE_COLOR_ERROR;
-  if (percent >= 75) return USAGE_COLOR_WARNING;
-  return USAGE_COLOR_DEFAULT;
+// Secondary text in the theme's description colour.
+function muted(text: string): string {
+  return `<span style="color:var(--vscode-descriptionForeground);">${escapeText(text)}</span>`;
 }
 
-function getUsageIcon(percent: number): string {
-  if (percent >= 90) return "$(error)";
-  if (percent >= 75) return "$(warning)";
-  return "$(circle-filled)";
+// Plain text for a hover that renders HTML and Markdown.
+function escapeText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/[\\`*_[\]]/g, "\\$&");
 }
 
 function clampPercent(percent: number): number {

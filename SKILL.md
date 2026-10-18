@@ -56,18 +56,39 @@ Anthropic's usage endpoint using Claude Code's stored claude.ai login.
   immediately to its right. Do not split a provider's session and weekly usage
   into separate items unless explicitly requested.
 - Default (non-compact) status text stays:
-  `$(codex-logo) Codex <session percent> · <session reset> | Week <weekly percent> · <weekly reset>`
-  (and the same shape with `$(claude-logo) Claude`). When
-  `codexUsage.compactStatusBar` is on, show only `<icon> <highest percent>`.
+  `$(codex-logo) Codex 🟢 5h <session percent> · <session reset>  🟡 Week <weekly percent> · <weekly reset>`
+  (and the same shape with `$(claude-logo) Claude`). The dot before each
+  window is graded by used percent (🟢 <50, 🟡 <75, 🟠 <90, 🔴 90+); with
+  `codexUsage.colorIndicators` off, drop the dots and join segments with ` | `.
+  When `codexUsage.compactStatusBar` is on, show only `<icon> <dot> <highest percent>`.
+- Status bar items can only use the theme's warning/error backgrounds and one
+  text colour, so colour per window comes from the emoji dots; keep the item's
+  text colour at the theme default for contrast. The warning/error background
+  is opt-in (`codexUsage.warningBackground`, default off) because a
+  permanently red item is distracting; do not turn it back on by default.
 - Claude per-model weekly caps (`additional_limits`) are charted in the Claude
-  hover/menu and count toward its compact percent and warning colour
-  (`includeAdditionalLimits`); Codex keeps them in More information only.
+  hover/menu and count toward its compact percent and optional background
+  (`includeAdditionalLimits`); one joins the status text once it reaches 75%.
+  Codex keeps them in More information only.
+- Hover colours are light: pastel badges with dark (`#1f2328`) text and light
+  bar fills. Keep new colours in that range.
 - Claude usage must stay cheap for an endpoint whose rate limit is shared with
   Claude Code: keep fetching in `ClaudeUsageService` (shared state, focused
   window only, never an expired token, backoff, 429 pause). Do not add
   per-window or per-tick requests.
 - Hover should stay lightweight and native: show only session and weekly usage
-  bars plus reset dates, then a `More information` command link.
+  bars plus reset dates, then a `More information` command link. It uses
+  `supportHtml` only for coloured `<span>` badges (provider name, `% used`) and
+  a muted reset line. VS Code keeps a span style only in the exact form
+  `color:…;background-color:…;` (hex or `var(--vscode-…)`), so build styles via
+  `badge()`/`muted()`, and pass every dynamic string through `escapeText()`.
+  Badge text keeps at least 4.5:1 contrast on its background.
+- The extension is displayed as **Codex & Claude Usage**, but its id
+  (`samsamhuns.vscode-codex-usage`), command ids, and `codexUsage.*` setting
+  keys stay as they are so installs upgrade in place and settings carry over.
+- `images/icon.png` (256×256) shows the Codex knot (white) and Claude spark
+  (terracotta) above a green and an amber usage meter, on black. It is drawn
+  from the two icon fonts' glyphs.
 - Click should use native VS Code UI such as `showQuickPick`, not a webview,
   unless the user explicitly asks for custom HTML.
 - Extra metadata belongs behind `More information`: captured time, source file,

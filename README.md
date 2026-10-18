@@ -1,4 +1,4 @@
-# Codex Usage for VS Code
+# Codex & Claude Usage for VS Code
 
 A lightweight VS Code extension that shows your OpenAI Codex CLI rate limits
 in the status bar, with your Claude Code 5-hour and weekly plan usage right
@@ -20,6 +20,10 @@ that adds Claude Code usage, published as `samsamhuns.vscode-codex-usage`.
 - **Compact or full footer:** show a minimal percent chip or the full
   per-window breakdown.
 - Provides usage bars and exact reset times on hover or click.
+- **Colour-coded:** each window gets a coloured dot in the status bar
+  (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up), and the hover shows
+  light, pastel usage badges and bars that stay readable in dark and light
+  themes. The status bar itself keeps its normal background.
 - Adapts to the windows reported by your plan, including 5-hour, daily,
   weekly, and monthly limits.
 - Displays plan, credits, and spend-control information when available.
@@ -99,13 +103,14 @@ Enterprise), a second item, with the Claude logo, appears right next to the
 Codex one:
 
 ```text
-Codex 5h 12% · 4h 59m | Week 22% · 4d 2h    Claude 5h 31% · 2h 9m | Week 27% · 3d 0h
+Codex 🟢 5h 12% · 4h 59m  🟡 Week 62% · 4d 2h    Claude 🟢 5h 31% · 2h 9m  🟢 Week 27% · 3d 0h
 ```
 
 Hover it for usage bars and reset times, including per-model weekly caps
 (such as an Opus weekly limit) when your plan has them; click it for the same
-menus as Codex. Each item gets its own warning colour, and for Claude a
-per-model cap close to its limit counts too.
+menus as Codex. When a Claude per-model cap reaches 75%, it is added to the
+status bar text too (e.g. `🔴 Opus weekly 93% · 3d 0h`), so you see it
+without hovering.
 
 The data is the same as Claude Code's `/usage`. The extension reads the
 claude.ai login Claude Code already stores (the macOS Keychain entry
@@ -139,6 +144,8 @@ says why and keeps showing the last good data.
 | `codexUsage.source` | `auto` | Data source: `auto`, `api` (online), or `rollout` (offline). |
 | `codexUsage.compactStatusBar` | `false` | Show a compact percent chip instead of the full breakdown. |
 | `codexUsage.showRemaining` | `false` | Show remaining usage (`% left`) instead of used usage. |
+| `codexUsage.colorIndicators` | `true` | Show a coloured dot for each usage window in the status bar and usage menu. |
+| `codexUsage.warningBackground` | `false` | Also colour the whole status bar item yellow at 75% used and red at 90%. |
 | `codexUsage.statusBarAlignment` | `left` | Which side of the status bar the usage items appear on (`left` or `right`). |
 | `codexUsage.codexHome` | `~/.codex` | Codex home directory. |
 | `codexUsage.refreshIntervalSeconds` | `60` | How often to refresh the status bar, in seconds. |
@@ -146,7 +153,7 @@ says why and keeps showing the last good data.
 | `codexUsage.claude.enabled` | `true` | Show Claude Code usage next to Codex. The item only appears when Claude Code is signed in with a claude.ai plan. |
 | `codexUsage.claude.refreshIntervalSeconds` | `300` | Minimum time between Claude Code usage fetches (at least 60 seconds). |
 
-The compact, remaining, and alignment settings apply to both items. To hide
+The compact, remaining, colour, and alignment settings apply to both items. To hide
 just one of them, right-click the status bar and untick **Codex Usage** or
 **Claude Code Usage**.
 
@@ -154,14 +161,14 @@ just one of them, right-click the status bar and untick **Codex Usage** or
 
 | Command | Description |
 | --- | --- |
-| **Codex Usage: Refresh** | Refresh Codex and Claude Code usage now. |
-| **Codex Usage: Show Usage** | Open the Codex usage summary. |
-| **Codex Usage: Show More Information** | Show Codex snapshot and account details. |
-| **Codex Usage: Open Sessions Folder** | Reveal the Codex sessions directory. |
-| **Codex Usage: Show Claude Code Usage** | Open the Claude Code usage summary. |
-| **Codex Usage: Show Claude Code More Information** | Show Claude Code plan, extra usage, and limit details. |
+| **Codex & Claude Usage: Refresh** | Refresh Codex and Claude Code usage now. |
+| **Codex & Claude Usage: Show Codex Usage** | Open the Codex usage summary. |
+| **Codex & Claude Usage: Show Codex More Information** | Show Codex snapshot and account details. |
+| **Codex & Claude Usage: Open Codex Sessions Folder** | Reveal the Codex sessions directory. |
+| **Codex & Claude Usage: Show Claude Code Usage** | Open the Claude Code usage summary. |
+| **Codex & Claude Usage: Show Claude Code More Information** | Show Claude Code plan, extra usage, and limit details. |
 
-**Codex Usage: Show More Information** opens a detail view with the snapshot
+**Show Codex More Information** opens a detail view with the snapshot
 source, capture time, rate-limit windows, plan, and credits:
 
 ![Codex Usage more information view](images/codex_more_info.png)
