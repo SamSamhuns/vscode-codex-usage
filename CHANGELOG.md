@@ -27,6 +27,10 @@
 - Give each status bar item its own id, so either one can be hidden from the
   status bar's context menu.
 - The empty-state tooltip now includes the reason when there is one.
+- Publish this fork as `samsamhuns.vscode-codex-usage` from
+  SamSamhuns/vscode-codex-usage. Uninstall the original
+  `ganymede404.vscode-codex-usage` before installing it, since both register
+  the same commands and settings.
 
 ## 0.2.4
 

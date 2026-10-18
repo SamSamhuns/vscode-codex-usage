@@ -5,6 +5,10 @@ in the status bar, with your Claude Code 5-hour and weekly plan usage right
 next to them. It can read local Codex session data offline, or query the
 live Codex usage endpoint using the credential you are already logged in with.
 
+This is a fork of
+[Ganymede404/vscode-codex-usage](https://github.com/Ganymede404/vscode-codex-usage)
+that adds Claude Code usage, published as `samsamhuns.vscode-codex-usage`.
+
 ## Features
 
 - Shows each available rate-limit window, usage percentage, and time to reset.
@@ -34,11 +38,19 @@ or, in compact mode, just the Codex logo and a single percent:
 ## Installation
 
 1. Download the latest `.vsix` file from
-   [GitHub Releases](https://github.com/Ganymede404/vscode-codex-usage/releases).
+   [GitHub Releases](https://github.com/SamSamhuns/vscode-codex-usage/releases).
 2. In VS Code, run **Extensions: Install from VSIX...** from the Command
    Palette and select the downloaded file.
 
 VS Code 1.85 or later and an existing Codex CLI session are required.
+
+If the original Codex Usage extension (`ganymede404.vscode-codex-usage`) is
+installed, uninstall it first: both register the same commands and settings.
+
+In a remote window (SSH, WSL, or a dev container) the extension runs on the
+remote machine, so install it there too. It then reads that machine's
+`~/.codex` and Claude Code login, and the Claude item appears once Claude Code
+is signed in on that machine.
 
 ## How It Works
 
