@@ -17,10 +17,11 @@ export function formatPercent(usedPercent: number, withDescription: boolean = tr
   return `${Math.round(p)}%${withDescription ? (showRemaining ? " remaining" : " used") : ""}`;
 }
 
-let colorIndicators = true;
+let colorIndicators = false;
 
-// When enabled, each usage window gets a coloured dot (🟢 🟡 🟠 🔴) graded by
-// its used percent, in the status bar and the usage menu.
+// When enabled, each window in the status bar text gets a coloured dot
+// (🟢 🟡 🟠 🔴) graded by its used percent. Off by default: an always-visible
+// dot is distracting, and the hover and usage menu are colour-coded anyway.
 export function setColorIndicators(value: boolean) {
   colorIndicators = value;
 }

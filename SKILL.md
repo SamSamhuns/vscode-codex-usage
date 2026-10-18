@@ -55,17 +55,18 @@ Anthropic's usage endpoint using Claude Code's stored claude.ai login.
   Claude item uses a fractionally lower priority than the Codex item so it sits
   immediately to its right. Do not split a provider's session and weekly usage
   into separate items unless explicitly requested.
-- Default (non-compact) status text stays:
-  `$(codex-logo) Codex 🟢 5h <session percent> · <session reset>  🟡 Week <weekly percent> · <weekly reset>`
-  (and the same shape with `$(claude-logo) Claude`). The dot before each
-  window is graded by used percent (🟢 <50, 🟡 <75, 🟠 <90, 🔴 90+); with
-  `codexUsage.colorIndicators` off, drop the dots and join segments with ` | `.
-  When `codexUsage.compactStatusBar` is on, show only `<icon> <dot> <highest percent>`.
-- Status bar items can only use the theme's warning/error backgrounds and one
-  text colour, so colour per window comes from the emoji dots; keep the item's
-  text colour at the theme default for contrast. The warning/error background
-  is opt-in (`codexUsage.warningBackground`, default off) because a
-  permanently red item is distracting; do not turn it back on by default.
+- Default (non-compact) status text stays plain:
+  `$(codex-logo) Codex 5h <session percent> · <session reset> | Week <weekly percent> · <weekly reset>`
+  (and the same shape with `$(claude-logo) Claude`). When
+  `codexUsage.compactStatusBar` is on, show only `<icon> <highest percent>`.
+- Keep the always-visible status bar calm: no colour by default. Coloured
+  dots per window (`codexUsage.colorIndicators`, segments then joined by two
+  spaces instead of ` | `) and the theme warning/error background
+  (`codexUsage.warningBackground`) are both opt-in and default off, because the
+  user found them distracting; do not turn either back on by default. Keep the
+  item's text colour at the theme default.
+- Colour lives where the user looks on purpose: the hover and the click menu
+  are always colour-coded (badges and bars; dots in the menu).
 - Claude per-model weekly caps (`additional_limits`) are charted in the Claude
   hover/menu and count toward its compact percent and optional background
   (`includeAdditionalLimits`); one joins the status text once it reaches 75%.

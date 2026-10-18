@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Remove the coloured dots from the status bar by default: always-visible
+  colour was distracting. The status bar is plain text again (segments joined
+  by `|`), while the hover keeps its coloured badges and bars and the click
+  menu keeps its dots. `codexUsage.colorIndicators` now only controls the
+  status bar dots and defaults to off; turn it on to bring them back.
+
 ## 0.4.0
 
 - Rename the extension to **Codex & Claude Usage**, with a new icon showing both

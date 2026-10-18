@@ -123,9 +123,8 @@ const SVG_BAR_RADIUS = 6;
 type UsageLevel = "low" | "medium" | "high" | "critical";
 
 interface LevelStyle {
-  // Status bar / menu indicator, and the codicon used when dots are off.
+  // Usage menu indicator, and the status bar's when its dots are turned on.
   dot: string;
-  icon: string;
   // Hover bar fill: light tones, outlined so they still read on light hovers.
   bar: string;
   // Hover percent badge: pastel background with dark text (10:1 or better).
@@ -136,10 +135,10 @@ interface LevelStyle {
 const BADGE_TEXT = "#1f2328";
 
 const LEVEL_STYLES: Record<UsageLevel, LevelStyle> = {
-  low: { dot: "🟢", icon: "$(circle-filled)", bar: "#4ac26b", badgeBackground: "#aceebb", badgeForeground: BADGE_TEXT },
-  medium: { dot: "🟡", icon: "$(circle-filled)", bar: "#eac54f", badgeBackground: "#f8e3a1", badgeForeground: BADGE_TEXT },
-  high: { dot: "🟠", icon: "$(warning)", bar: "#ffa657", badgeBackground: "#ffd8b5", badgeForeground: BADGE_TEXT },
-  critical: { dot: "🔴", icon: "$(error)", bar: "#ff8182", badgeBackground: "#ffcecb", badgeForeground: BADGE_TEXT },
+  low: { dot: "🟢", bar: "#4ac26b", badgeBackground: "#aceebb", badgeForeground: BADGE_TEXT },
+  medium: { dot: "🟡", bar: "#eac54f", badgeBackground: "#f8e3a1", badgeForeground: BADGE_TEXT },
+  high: { dot: "🟠", bar: "#ffa657", badgeBackground: "#ffd8b5", badgeForeground: BADGE_TEXT },
+  critical: { dot: "🔴", bar: "#ff8182", badgeBackground: "#ffcecb", badgeForeground: BADGE_TEXT },
 };
 
 // Graded by used percent, whatever `showRemaining` displays. 75 and 90 match the
@@ -152,7 +151,7 @@ function usageLevel(usedPercent: number): UsageLevel {
   return "low";
 }
 
-// "🟢 " before a window's text, or nothing when colour indicators are off.
+// "🟢 " before a window's status bar text, or nothing unless its dots are on.
 function levelDot(usedPercent: number): string {
   return colorIndicatorsEnabled() ? `${LEVEL_STYLES[usageLevel(usedPercent)].dot} ` : "";
 }
@@ -545,9 +544,9 @@ function formatTextBar(percent: number): string {
   const pct = clampPercent(percent);
   const shown = displayPercent(pct);
   const filled = shown > 0 ? Math.max(1, Math.round((shown / 100) * TEXT_BAR_WIDTH)) : 0;
-  const style = LEVEL_STYLES[usageLevel(pct)];
-  const indicator = colorIndicatorsEnabled() ? style.dot : style.icon;
-  return `${indicator} ${"█".repeat(filled)}${"░".repeat(TEXT_BAR_WIDTH - filled)}`;
+  // The menu only shows on click, so it is always colour-coded, like the hover.
+  const dot = LEVEL_STYLES[usageLevel(pct)].dot;
+  return `${dot} ${"█".repeat(filled)}${"░".repeat(TEXT_BAR_WIDTH - filled)}`;
 }
 
 function formatSvgBar(percent: number, altText: string): string {

@@ -17,7 +17,7 @@ charts, multi-account, notifications/alerts.
 
 Show Claude Code's **5-hour session** and **weekly** plan limits in a second
 status bar item, immediately right of the Codex item (same alignment,
-fractionally lower priority), with its own tooltip, menus, and colour dots.
+fractionally lower priority), with its own tooltip and menus.
 
 - **Source:** `GET https://api.anthropic.com/api/oauth/usage` (the endpoint
   behind Claude Code's `/usage`) with the claude.ai OAuth token Claude Code
@@ -81,10 +81,11 @@ Edge cases to handle:
 $(pulse) Codex 12% · 4h59m | Week 22% · 4d 2h
 ```
 
-Color: each window gets a coloured dot (🟢 <50, 🟡 <75, 🟠 <90, 🔴 90+),
-toggled by `codexUsage.colorIndicators`. Since 0.4.0 the item keeps the normal
-status bar background; the old warning (`>= 75`) / error (`>= 90`)
-`backgroundColor` is opt-in via `codexUsage.warningBackground`.
+Color: none in the status bar by default (since 0.4.1). Per-window dots
+(🟢 <50, 🟡 <75, 🟠 <90, 🔴 90+) via `codexUsage.colorIndicators` and the old
+warning (`>= 75`) / error (`>= 90`) `backgroundColor` via
+`codexUsage.warningBackground` are both opt-in. The hover and click menu are
+always colour-coded.
 
 Tooltip: current-session and weekly bars (light colours, by the same levels)
 with a pastel `% used` badge and a `Resets in … · <date>` line. Extra metadata

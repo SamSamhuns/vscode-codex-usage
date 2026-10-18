@@ -2,7 +2,7 @@
   "name": "vscode-codex-usage",
   "displayName": "Codex & Claude Usage",
   "description": "Show Codex CLI and Claude Code usage side by side in the VS Code status bar.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "samsamhuns",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -99,13 +99,13 @@
         },
         "codexUsage.colorIndicators": {
           "type": "boolean",
-          "default": true,
-          "description": "Show a coloured dot (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up) next to each usage window in the status bar and usage menu. Turn off for plain text."
+          "default": false,
+          "description": "Also show a coloured dot (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up) before each usage window in the status bar text. Off by default; the hover and usage menu are always colour-coded."
         },
         "codexUsage.warningBackground": {
           "type": "boolean",
           "default": false,
-          "description": "Also colour the whole status bar item with the theme's warning background at 75% used and its error (red) background at 90%. Off by default, since the coloured dots already show each window's level."
+          "description": "Also colour the whole status bar item with the theme's warning background at 75% used and its error (red) background at 90%. Off by default; the hover and usage menu are always colour-coded."
         },
         "codexUsage.statusBarAlignment": {
           "type": "string",

@@ -20,10 +20,10 @@ that adds Claude Code usage, published as `samsamhuns.vscode-codex-usage`.
 - **Compact or full footer:** show a minimal percent chip or the full
   per-window breakdown.
 - Provides usage bars and exact reset times on hover or click.
-- **Colour-coded:** each window gets a coloured dot in the status bar
-  (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90% and up), and the hover shows
-  light, pastel usage badges and bars that stay readable in dark and light
-  themes. The status bar itself keeps its normal background.
+- **Calm status bar, colour-coded details:** the status bar stays plain text,
+  while the hover shows light, pastel usage badges and bars, and the click menu
+  a coloured dot per window (🟢 under 50%, 🟡 under 75%, 🟠 under 90%, 🔴 90%
+  and up). Both stay readable in dark and light themes.
 - Adapts to the windows reported by your plan, including 5-hour, daily,
   weekly, and monthly limits.
 - Displays plan, credits, and spend-control information when available.
@@ -103,7 +103,7 @@ Enterprise), a second item, with the Claude logo, appears right next to the
 Codex one:
 
 ```text
-Codex 🟢 5h 12% · 4h 59m  🟡 Week 62% · 4d 2h    Claude 🟢 5h 31% · 2h 9m  🟢 Week 27% · 3d 0h
+Codex 5h 12% · 4h 59m | Week 62% · 4d 2h    Claude 5h 31% · 2h 9m | Week 27% · 3d 0h
 ```
 
 Hover it for usage bars and reset times, including per-model weekly caps
@@ -144,7 +144,7 @@ says why and keeps showing the last good data.
 | `codexUsage.source` | `auto` | Data source: `auto`, `api` (online), or `rollout` (offline). |
 | `codexUsage.compactStatusBar` | `false` | Show a compact percent chip instead of the full breakdown. |
 | `codexUsage.showRemaining` | `false` | Show remaining usage (`% left`) instead of used usage. |
-| `codexUsage.colorIndicators` | `true` | Show a coloured dot for each usage window in the status bar and usage menu. |
+| `codexUsage.colorIndicators` | `false` | Also show a coloured dot before each usage window in the status bar text. |
 | `codexUsage.warningBackground` | `false` | Also colour the whole status bar item yellow at 75% used and red at 90%. |
 | `codexUsage.statusBarAlignment` | `left` | Which side of the status bar the usage items appear on (`left` or `right`). |
 | `codexUsage.codexHome` | `~/.codex` | Codex home directory. |

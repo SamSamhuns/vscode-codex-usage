@@ -68,7 +68,7 @@ function getConfig() {
     source: (["auto", "api", "rollout"].includes(source) ? source : "auto") as UsageSource,
     compact: c.get<boolean>("compactStatusBar", false),
     showRemaining: c.get<boolean>("showRemaining", false),
-    colorIndicators: c.get<boolean>("colorIndicators", true),
+    colorIndicators: c.get<boolean>("colorIndicators", false),
     warningBackground: c.get<boolean>("warningBackground", false),
     statusBarAlignment: (side === "right" ? "right" : "left") as StatusBarSide,
     claudeEnabled: c.get<boolean>("claude.enabled", true),
