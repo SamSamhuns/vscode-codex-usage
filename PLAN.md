@@ -13,6 +13,32 @@ A small VS Code extension that monitors OpenAI Codex CLI usage and surfaces
 Out of scope (for v1): per-model breakdown, cost tracking, historical
 charts, multi-account, notifications/alerts.
 
+## Claude Code usage (0.3.0)
+
+Show Claude Code's **5-hour session** and **weekly** plan limits in a second
+status bar item, immediately right of the Codex item (same alignment,
+fractionally lower priority), with its own tooltip, menus, and warning colour.
+
+- **Source:** `GET https://api.anthropic.com/api/oauth/usage` (the endpoint
+  behind Claude Code's `/usage`) with the claude.ai OAuth token Claude Code
+  stores in the macOS Keychain (`Claude Code-credentials`) or
+  `~/.claude/.credentials.json`. Read-only; never refreshed. Rows of the
+  `limits[]` array map by `kind`: `session` → primary (5h), `weekly_all` →
+  secondary (weekly), anything else (e.g. `weekly_scoped` per-model caps) →
+  `additional_limits`. Older flat `five_hour`/`seven_day` buckets are the
+  fallback.
+- **Why not a local source?** Claude Code documents no usage file, and its
+  statusline `rate_limits` input only reaches a statusline command where one
+  runs (the terminal CLI). The endpoint reports account-wide usage, covering the
+  CLI, the Claude Code VS Code panel, claude.ai, and other devices alike.
+- **Overhead budget:** the endpoint's rate limit is shared with Claude Code, so
+  `ClaudeUsageService` shares one fetch across windows (state file in global
+  storage), only fetches from a focused window and only when the shared data
+  is older than `codexUsage.claude.refreshIntervalSeconds` (default 300s),
+  never sends an expired token, backs off exponentially, and honours
+  `Retry-After`/`429` for every window and manual refresh. The credential is
+  cached in memory and only re-read when missing, expired, or rejected.
+
 ## Data source
 
 Codex CLI writes rollout files at:
@@ -84,7 +110,13 @@ lengths without opening a webview.
 src/
   extension.ts        activate/deactivate, wires everything
   codexReader.ts      find latest rollout, parse last token_count
-  statusBar.ts        single StatusBarItem + native summary formatting
+  codexAuth.ts        read ~/.codex/auth.json (online mode)
+  codexApi.ts         live Codex usage endpoint (online mode)
+  claudeAuth.ts       read Claude Code's claude.ai login (Keychain / file)
+  claudeApi.ts        Claude usage endpoint + response normalisation
+  claudeUsage.ts      cross-window cache, focus gating, backoff
+  http.ts             shared read-only HTTPS GET
+  statusBar.ts        one StatusBarItem per provider + native summary formatting
   format.ts           percent / duration helpers
   types.ts            RateLimits, Snapshot
 ```

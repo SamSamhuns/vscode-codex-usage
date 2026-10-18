@@ -3,6 +3,7 @@ import {
   Snapshot,
   RateLimitWindow,
   CreditsSnapshot,
+  ExtraUsageSnapshot,
   SpendControlLimitSnapshot,
   AdditionalRateLimitSnapshot,
   RateLimitResetCredits,
@@ -23,6 +24,27 @@ import {
   windowShortLabel,
   WindowSlot,
 } from "./format";
+
+// Each usage provider (Codex, Claude Code) gets its own status bar item, so
+// the two sit side by side with their own warning colours and menus.
+export interface UsageProvider {
+  // Stable status bar item id, so VS Code can hide each provider separately.
+  id: string;
+  // Item name in the status bar's context menu, e.g. "Codex Usage".
+  title: string;
+  // Short name in the status bar text and menus, e.g. "Codex".
+  name: string;
+  // Leading icon, e.g. "$(codex-logo)".
+  icon: string;
+  showUsageCommand: string;
+  moreInformationCommand: string;
+  // Tooltip while there is no snapshot.
+  emptyTooltip: string;
+  // Treat `additional_limits` (e.g. per-model weekly caps) like the main
+  // windows: charted in the hover and usage menu, and counted for the compact
+  // percent and warning colour. Otherwise they appear in More information only.
+  includeAdditionalLimits: boolean;
+}
 
 interface LabeledWindow {
   slot: WindowSlot;
@@ -50,6 +72,31 @@ function collectWindows(snapshot: Snapshot): LabeledWindow[] {
   return out;
 }
 
+// The main windows plus, for providers that ask for it, every window of the
+// additional limits, labeled with the limit's name.
+function chartedWindows(snapshot: Snapshot, provider: UsageProvider): LabeledWindow[] {
+  const out = collectWindows(snapshot);
+  if (!provider.includeAdditionalLimits) return out;
+  for (const limit of snapshot.rateLimits.additional_limits ?? []) {
+    const present = (["primary", "secondary"] as const).flatMap((slot) => {
+      const window = limit[slot];
+      return window ? [{ slot, window }] : [];
+    });
+    for (const { slot, window } of present) {
+      out.push({
+        slot,
+        window,
+        shortLabel: windowShortLabel(window, slot),
+        longLabel:
+          present.length > 1
+            ? `${limit.limit_name} · ${windowLongLabel(window, slot)}`
+            : `${limit.limit_name} limit`,
+      });
+    }
+  }
+  return out;
+}
+
 function windowIcon(shortLabel: string): string {
   return shortLabel === "5h" || shortLabel === "Usage" ? "$(pulse)" : "$(calendar)";
 }
@@ -64,13 +111,19 @@ const USAGE_COLOR_ERROR = "#f14c4c";
 
 export type StatusBarSide = "left" | "right";
 
-const STATUS_BAR_PRIORITY = 100;
+// Higher priority sits further left on either side. A provider listed after
+// another uses a fractionally lower priority, so it lands right next to it.
+export const STATUS_BAR_PRIORITY = 100;
 
 export class StatusBar {
   private item: vscode.StatusBarItem;
   private side: StatusBarSide;
 
-  constructor(side: StatusBarSide = "left") {
+  constructor(
+    private readonly provider: UsageProvider,
+    side: StatusBarSide = "left",
+    private readonly priority: number = STATUS_BAR_PRIORITY,
+  ) {
     this.side = side;
     this.item = this.createItem(side);
   }
@@ -78,8 +131,9 @@ export class StatusBar {
   private createItem(side: StatusBarSide): vscode.StatusBarItem {
     const alignment =
       side === "right" ? vscode.StatusBarAlignment.Right : vscode.StatusBarAlignment.Left;
-    const item = vscode.window.createStatusBarItem(alignment, STATUS_BAR_PRIORITY);
-    item.command = "codexUsage.showUsage";
+    const item = vscode.window.createStatusBarItem(this.provider.id, alignment, this.priority);
+    item.name = this.provider.title;
+    item.command = this.provider.showUsageCommand;
     return item;
   }
 
@@ -94,32 +148,41 @@ export class StatusBar {
     return true;
   }
 
+  hide() {
+    this.item.hide();
+  }
+
   dispose() {
     this.item.dispose();
   }
 
   update(snapshot: Snapshot | null, options: StatusBarOptions = {}) {
+    const { icon, name } = this.provider;
     const compact = options.compact ?? false;
+    const emptyText = compact ? `${icon} —` : `${icon} ${name} —`;
     if (!snapshot) {
-      this.item.text = compact ? "$(codex-logo) —" : "$(codex-logo) Codex —";
-      this.item.tooltip = "No Codex usage data. Start a Codex session or run 'codex login'.";
+      this.item.text = emptyText;
+      this.item.tooltip = options.note
+        ? `${this.provider.emptyTooltip}\n\n${options.note}`
+        : this.provider.emptyTooltip;
       this.item.backgroundColor = undefined;
       this.item.show();
       return;
     }
 
     const windows = collectWindows(snapshot);
-    if (windows.length === 0) {
-      this.item.text = compact ? "$(codex-logo) —" : "$(codex-logo) Codex —";
-    } else if (compact) {
-      this.item.text = formatCompactText(windows);
+    const charted = chartedWindows(snapshot, this.provider);
+    if (charted.length === 0) {
+      this.item.text = emptyText;
+    } else if (compact || windows.length === 0) {
+      this.item.text = formatCompactText(compact ? icon : `${icon} ${name}`, charted);
     } else {
       const segments = windows.map((w) => formatStatusSegment(w.shortLabel, w.window, snapshot));
-      this.item.text = `$(codex-logo) Codex ${segments.join(" | ")}`;
+      this.item.text = `${icon} ${name} ${segments.join(" | ")}`;
     }
-    this.item.tooltip = renderUsageTooltip(snapshot, windows, options.note);
+    this.item.tooltip = renderUsageTooltip(this.provider, snapshot, charted, options.note);
 
-    const highestPercent = windows.reduce((max, w) => Math.max(max, w.window.used_percent ?? 0), 0);
+    const highestPercent = charted.reduce((max, w) => Math.max(max, w.window.used_percent ?? 0), 0);
     if (highestPercent >= 90) {
       this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
     } else if (highestPercent >= 75) {
@@ -132,15 +195,18 @@ export class StatusBar {
   }
 }
 
-export function createUsageSummaryItems(snapshot: Snapshot): vscode.QuickPickItem[] {
-  const windows = collectWindows(snapshot);
+export function createUsageSummaryItems(
+  snapshot: Snapshot,
+  provider: UsageProvider,
+): vscode.QuickPickItem[] {
+  const windows = chartedWindows(snapshot, provider);
   const items: vscode.QuickPickItem[] = windows.map((w) =>
     createUsageQuickPickItem(`${windowIcon(w.shortLabel)} ${w.longLabel}`, w.window, snapshot),
   );
   if (items.length === 0) {
     items.push({
       label: "$(pulse) Rate limits",
-      detail: "No rate-limit windows reported by Codex.",
+      detail: `No rate-limit windows reported by ${provider.name}.`,
     });
   }
   items.push({
@@ -195,6 +261,14 @@ export function createMoreInformationItems(
     items.push({
       label: "$(credit-card) Credits",
       detail: credits,
+    });
+  }
+
+  const extraUsage = formatExtraUsage(snapshot.rateLimits.extra_usage ?? null);
+  if (extraUsage) {
+    items.push({
+      label: "$(credit-card) Extra usage",
+      detail: extraUsage,
     });
   }
 
@@ -263,6 +337,36 @@ function formatCredits(credits: CreditsSnapshot | null): string | null {
   return `${credits.balance ? `Balance: ${credits.balance}` : "Available"}${overage}`;
 }
 
+// Pay-as-you-go spend past the plan limits, e.g. "$12.34 of $50.00 used (25%)".
+function formatExtraUsage(extra: ExtraUsageSnapshot | null): string | null {
+  if (!extra) return null;
+  const used = extra.used_credits;
+  if (!extra.is_enabled && !(used !== null && used > 0)) return null;
+
+  const limit = extra.monthly_limit;
+  let text =
+    used !== null && limit !== null
+      ? `${formatMinorUnits(used, extra.currency)} of ${formatMinorUnits(limit, extra.currency)} used`
+      : used !== null
+        ? `${formatMinorUnits(used, extra.currency)} used`
+        : limit !== null
+          ? `${formatMinorUnits(limit, extra.currency)} monthly limit`
+          : "Enabled";
+  if (extra.utilization !== null) text += ` (${Math.round(extra.utilization)}%)`;
+  return extra.is_enabled ? text : `${text} — off`;
+}
+
+// Amounts arrive in the currency's minor units (cents for USD).
+function formatMinorUnits(amount: number, currency: string | null): string {
+  const code = currency ?? "USD";
+  try {
+    const fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: code });
+    return fmt.format(amount / 10 ** (fmt.resolvedOptions().maximumFractionDigits ?? 2));
+  } catch {
+    return `${(amount / 100).toFixed(2)} ${code}`;
+  }
+}
+
 function formatIndividualLimit(limit: SpendControlLimitSnapshot | null): string | null {
   if (!limit) return null;
   return `${limit.used} / ${limit.limit} (${limit.remaining_percent}% remaining)`;
@@ -289,14 +393,15 @@ export function isMoreInformationItem(item: vscode.QuickPickItem | undefined): b
 }
 
 function renderUsageTooltip(
+  provider: UsageProvider,
   snapshot: Snapshot,
   windows: LabeledWindow[],
   note?: string,
 ): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
-  md.isTrusted = { enabledCommands: ["codexUsage.showMoreInformation"] };
+  md.isTrusted = { enabledCommands: [provider.moreInformationCommand] };
 
-  md.appendMarkdown(`**Codex usage** · ${sourceLabel(snapshot)}\n\n`);
+  md.appendMarkdown(`**${provider.name} usage** · ${sourceLabel(snapshot)}\n\n`);
   if (windows.length === 0) {
     md.appendMarkdown("No rate-limit windows reported\n");
   } else {
@@ -308,7 +413,7 @@ function renderUsageTooltip(
   if (note) {
     md.appendMarkdown(`\n\n$(info) ${escapeMarkdownAltText(note)}`);
   }
-  md.appendMarkdown("\n\n[More information](command:codexUsage.showMoreInformation)");
+  md.appendMarkdown(`\n\n[More information](command:${provider.moreInformationCommand})`);
 
   return md;
 }
@@ -320,11 +425,11 @@ function sourceLabel(snapshot: Snapshot): string {
 
 // Compact chip: icon + the single highest-used window percent, so the number
 // always matches the warning/error background colour.
-function formatCompactText(windows: LabeledWindow[]): string {
+function formatCompactText(prefix: string, windows: LabeledWindow[]): string {
   const top = windows.reduce((a, b) =>
     (b.window.used_percent ?? 0) > (a.window.used_percent ?? 0) ? b : a,
   );
-  return `$(codex-logo) ${formatPercent(clampPercent(top.window.used_percent), false)}`;
+  return `${prefix} ${formatPercent(clampPercent(top.window.used_percent), false)}`;
 }
 
 function appendUsageWindow(

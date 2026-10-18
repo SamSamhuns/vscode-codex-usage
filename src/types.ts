@@ -42,10 +42,21 @@ export interface AdditionalRateLimitSnapshot {
   secondary?: RateLimitWindow | null;
 }
 
+// Claude Code only: pay-as-you-go spend once plan limits run out. Amounts are
+// in minor units of `currency` (cents for USD), as the usage endpoint sends them.
+export interface ExtraUsageSnapshot {
+  is_enabled: boolean;
+  monthly_limit: number | null;
+  used_credits: number | null;
+  utilization: number | null;
+  currency: string | null;
+}
+
 export interface RateLimits {
   primary?: RateLimitWindow | null;
   secondary?: RateLimitWindow | null;
   credits?: CreditsSnapshot | null;
+  extra_usage?: ExtraUsageSnapshot | null;
   plan_type?: string | null;
   limit_id?: string | null;
   limit_name?: string | null;
@@ -64,7 +75,7 @@ export interface RateLimits {
 }
 
 // Where a snapshot came from: the local rollout JSONL files (offline) or a
-// live query against the Codex backend using the logged-in credential.
+// live query against the provider's backend using the logged-in credential.
 export type SnapshotSource = "rollout" | "api";
 
 export interface Snapshot {

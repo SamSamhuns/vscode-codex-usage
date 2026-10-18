@@ -1,12 +1,16 @@
 # Codex Usage for VS Code
 
 A lightweight VS Code extension that shows your OpenAI Codex CLI rate limits
-in the status bar. It can read local Codex session data offline, or query the
+in the status bar, with your Claude Code 5-hour and weekly plan usage right
+next to them. It can read local Codex session data offline, or query the
 live Codex usage endpoint using the credential you are already logged in with.
 
 ## Features
 
 - Shows each available rate-limit window, usage percentage, and time to reset.
+- **Claude Code side by side:** a second status bar item shows Claude Code's
+  5-hour session and weekly limits (plus any per-model weekly caps) next to
+  Codex, using the Claude Code login you already have.
 - **Online or offline:** query the live Codex usage API with your existing
   login, or read local rollout files with no network access at all.
 - **Compact or full footer:** show a minimal percent chip or the full
@@ -76,25 +80,74 @@ In `auto` and `api` modes, if the live query can't run (not logged in, expired
 token, offline) the extension falls back to the latest rollout snapshot and
 notes why in the tooltip.
 
+### Claude Code usage
+
+When Claude Code is signed in with a claude.ai plan (Pro, Max, Team, or
+Enterprise), a second item, with the Claude logo, appears right next to the
+Codex one:
+
+```text
+Codex 5h 12% · 4h 59m | Week 22% · 4d 2h    Claude 5h 31% · 2h 9m | Week 27% · 3d 0h
+```
+
+Hover it for usage bars and reset times, including per-model weekly caps
+(such as an Opus weekly limit) when your plan has them; click it for the same
+menus as Codex. Each item gets its own warning colour, and for Claude a
+per-model cap close to its limit counts too.
+
+The data is the same as Claude Code's `/usage`. The extension reads the
+claude.ai login Claude Code already stores (the macOS Keychain entry
+`Claude Code-credentials`, or `~/.claude/.credentials.json` on Linux and
+Windows) and sends a read-only `GET` to
+`https://api.anthropic.com/api/oauth/usage`. The login is never refreshed or
+written back. If its token has expired, the extension waits for Claude Code to
+renew it the next time Claude Code runs.
+
+That endpoint is rate limited per account, and Claude Code's own `/usage` uses
+the same allowance, so the extension calls it as rarely as possible:
+
+- One fetch is shared by every VS Code window, through a small state file in
+  the extension's global storage.
+- Only a focused window fetches, at most every
+  `codexUsage.claude.refreshIntervalSeconds` (5 minutes by default). Other
+  windows reuse the result, and nothing is fetched while VS Code is in the
+  background.
+- An expired token is never sent, because the endpoint answers those with a
+  long rate-limit cooldown.
+- Failures back off exponentially. A `429` response pauses every window,
+  manual refreshes included, for as long as the server asks.
+
+The endpoint is undocumented and may change. When a fetch fails, the tooltip
+says why and keeps showing the last good data.
+
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `codexUsage.source` | `auto` | Data source: `auto`, `api` (online), or `rollout` (offline). |
 | `codexUsage.compactStatusBar` | `false` | Show a compact percent chip instead of the full breakdown. |
-| `codexUsage.statusBarAlignment` | `left` | Which side of the status bar the usage item appears on (`left` or `right`). |
+| `codexUsage.showRemaining` | `false` | Show remaining usage (`% left`) instead of used usage. |
+| `codexUsage.statusBarAlignment` | `left` | Which side of the status bar the usage items appear on (`left` or `right`). |
 | `codexUsage.codexHome` | `~/.codex` | Codex home directory. |
-| `codexUsage.refreshIntervalSeconds` | `60` | How often to refresh usage, in seconds. |
+| `codexUsage.refreshIntervalSeconds` | `60` | How often to refresh the status bar, in seconds. |
 | `codexUsage.lookbackDays` | `7` | Number of days to scan for rollout files. |
+| `codexUsage.claude.enabled` | `true` | Show Claude Code usage next to Codex. The item only appears when Claude Code is signed in with a claude.ai plan. |
+| `codexUsage.claude.refreshIntervalSeconds` | `300` | Minimum time between Claude Code usage fetches (at least 60 seconds). |
+
+The compact, remaining, and alignment settings apply to both items. To hide
+just one of them, right-click the status bar and untick **Codex Usage** or
+**Claude Code Usage**.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
-| **Codex Usage: Refresh** | Refresh the current usage snapshot. |
-| **Codex Usage: Show Usage** | Open the usage summary. |
-| **Codex Usage: Show More Information** | Show snapshot and account details. |
+| **Codex Usage: Refresh** | Refresh Codex and Claude Code usage now. |
+| **Codex Usage: Show Usage** | Open the Codex usage summary. |
+| **Codex Usage: Show More Information** | Show Codex snapshot and account details. |
 | **Codex Usage: Open Sessions Folder** | Reveal the Codex sessions directory. |
+| **Codex Usage: Show Claude Code Usage** | Open the Claude Code usage summary. |
+| **Codex Usage: Show Claude Code More Information** | Show Claude Code plan, extra usage, and limit details. |
 
 **Codex Usage: Show More Information** opens a detail view with the snapshot
 source, capture time, rate-limit windows, plan, and credits:
@@ -116,3 +169,12 @@ Press `F5` in VS Code to launch an Extension Development Host.
   usage remains unavailable until Codex writes a populated event.
 - Usage reflects the latest local rollout snapshot and cannot update more
   frequently than Codex writes that data.
+- Claude Code usage is only available for claude.ai plan logins. API-key,
+  Console, and third-party provider (Bedrock, Vertex, Foundry) setups have no
+  plan limits to show, so the Claude item stays hidden.
+- Claude Code usage can be up to `codexUsage.claude.refreshIntervalSeconds`
+  old, and pauses while Claude Code's login token is expired. A window whose
+  reset time has passed shows as reset.
+- With a custom `CLAUDE_CONFIG_DIR` on macOS, Claude Code stores its login
+  under a different Keychain entry, which the extension doesn't read. It only
+  reads that directory's `.credentials.json`.

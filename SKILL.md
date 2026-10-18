@@ -1,6 +1,6 @@
 ---
 name: vscode-codex-usage
-description: Maintain the vscode-codex-usage VS Code extension. Use when changing the Codex usage status bar, rollout JSONL parsing, extension manifest, Marketplace packaging, README, or development workflow in this repository.
+description: Maintain the vscode-codex-usage VS Code extension. Use when changing the Codex or Claude Code usage status bar items, rollout JSONL parsing, the Codex/Claude usage endpoints, extension manifest, Marketplace packaging, README, or development workflow in this repository.
 ---
 
 # vscode-codex-usage
@@ -8,18 +8,33 @@ description: Maintain the vscode-codex-usage VS Code extension. Use when changin
 ## Purpose
 
 This repo is a TypeScript VS Code extension that shows Codex CLI primary/session
-and secondary/weekly usage in one VS Code status bar item. Data comes either
-from local rollout JSONL files in `~/.codex/sessions/` (offline) or from a live
-query against the Codex usage endpoint using the logged-in credential (online),
-selected via `codexUsage.source`.
+and secondary/weekly usage in one VS Code status bar item, and Claude Code's
+5-hour/weekly plan usage in a second item right next to it. Codex data comes
+either from local rollout JSONL files in `~/.codex/sessions/` (offline) or from
+a live query against the Codex usage endpoint using the logged-in credential
+(online), selected via `codexUsage.source`. Claude Code data comes from
+Anthropic's usage endpoint using Claude Code's stored claude.ai login.
 
 ## Current Shape
 
 - `src/extension.ts`: activation, polling, command registration, quick-pick UI,
-  and source selection (`auto`/`api`/`rollout`) with rollout fallback.
-- `src/statusBar.ts`: single `StatusBarItem`, tooltip rendering, native usage and
-  metadata item builders, compact/full text, source labeling, and left/right
-  alignment (recreates the item since alignment is fixed at creation).
+  source selection (`auto`/`api`/`rollout`) with rollout fallback, and the
+  `CODEX`/`CLAUDE` provider descriptors.
+- `src/statusBar.ts`: one `StatusBarItem` per `UsageProvider`, tooltip rendering,
+  native usage and metadata item builders, compact/full text, source labeling,
+  and left/right alignment (recreates the item since alignment is fixed at
+  creation).
+- `src/claudeAuth.ts`: reads Claude Code's claude.ai login from the macOS
+  Keychain (`Claude Code-credentials`, via `/usr/bin/security`) or
+  `<CLAUDE_CONFIG_DIR or ~/.claude>/.credentials.json`. Read-only; never refreshes.
+- `src/claudeApi.ts`: GETs `api.anthropic.com/api/oauth/usage` and normalizes its
+  `limits[]` rows (by `kind`) or legacy flat buckets into `RateLimits`. Throws
+  `ClaudeApiError` (with `Retry-After`).
+- `src/claudeUsage.ts`: `ClaudeUsageService`, the fetch policy (no `vscode`
+  import, so it is unit-testable): cross-window state file in global storage,
+  focused-window-only fetching, expired-token skip, exponential backoff, 429
+  pause.
+- `src/http.ts`: shared read-only HTTPS GET used by both live sources.
 - `src/codexReader.ts`: resolves Codex home, finds recent rollout files, parses
   the latest usable `token_count.rate_limits`.
 - `src/codexAuth.ts`: reads `~/.codex/auth.json` for the OAuth access token and
@@ -30,15 +45,27 @@ selected via `codexUsage.source`.
 - `src/types.ts`: `RateLimitWindow`, `RateLimits`, `Snapshot`, `SnapshotSource`.
 - `icons/codex-icon.woff`: contributed Codex-logo icon font (glyph U+E900) used as
   the status bar `$(codex-logo)` icon.
+- `icons/claude-icon.woff`: contributed Claude-logo icon font (glyph U+E900, same
+  1000-unit em box as the Codex font) used as the `$(claude-logo)` icon.
 - `package.json`: VS Code extension manifest, `contributes.icons`, npm scripts.
 
 ## UI Constraints
 
-- Keep one status bar item. Do not split session and weekly usage back into two
-  items unless explicitly requested.
+- Keep one status bar item per provider (Codex, Claude Code), side by side: the
+  Claude item uses a fractionally lower priority than the Codex item so it sits
+  immediately to its right. Do not split a provider's session and weekly usage
+  into separate items unless explicitly requested.
 - Default (non-compact) status text stays:
-  `$(pulse) Codex <session percent> · <session reset> | Week <weekly percent> · <weekly reset>`.
-  When `codexUsage.compactStatusBar` is on, show only `$(pulse) <highest percent>`.
+  `$(codex-logo) Codex <session percent> · <session reset> | Week <weekly percent> · <weekly reset>`
+  (and the same shape with `$(claude-logo) Claude`). When
+  `codexUsage.compactStatusBar` is on, show only `<icon> <highest percent>`.
+- Claude per-model weekly caps (`additional_limits`) are charted in the Claude
+  hover/menu and count toward its compact percent and warning colour
+  (`includeAdditionalLimits`); Codex keeps them in More information only.
+- Claude usage must stay cheap for an endpoint whose rate limit is shared with
+  Claude Code: keep fetching in `ClaudeUsageService` (shared state, focused
+  window only, never an expired token, backoff, 429 pause). Do not add
+  per-window or per-tick requests.
 - Hover should stay lightweight and native: show only session and weekly usage
   bars plus reset dates, then a `More information` command link.
 - Click should use native VS Code UI such as `showQuickPick`, not a webview,
@@ -92,6 +119,7 @@ code --install-extension vscode-codex-usage-<version>.vsix
 
 - Prefer small, focused changes and run `npm run compile` before finishing.
 - Keep `README.md` and `PLAN.md` aligned when user-facing behavior changes.
-- Avoid adding runtime network calls; the extension should remain local,
-  read-only, and telemetry-free.
+- Avoid adding runtime network calls beyond the two providers' own usage
+  endpoints; the extension should remain read-only and telemetry-free, and must
+  never refresh, rewrite, or persist either provider's credential.
 - Treat `out/`, `node_modules/`, `.vscode-test/`, and `*.vsix` as generated.

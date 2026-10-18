@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0
+
+- Add **Claude Code usage** side by side with Codex. A second status bar
+  item, right next to the Codex one, shows Claude Code's 5-hour session and
+  weekly plan limits (and per-model weekly caps such as Opus, when the plan
+  has them), with the same hover bars, usage menu, More information view,
+  compact chip, remaining-percent mode, alignment, and warning colours.
+  - Data comes from `https://api.anthropic.com/api/oauth/usage`, the endpoint
+    behind Claude Code's `/usage`, using the claude.ai login Claude Code
+    already stores (macOS Keychain `Claude Code-credentials`, or
+    `~/.claude/.credentials.json`). Read-only: the login is never refreshed or
+    rewritten. Both the current `limits[]` response and the older flat
+    `five_hour`/`seven_day` fields are understood.
+  - That endpoint's rate limit is shared with Claude Code itself, so one
+    fetch is shared by all VS Code windows, only a focused window fetches (at
+    most every 5 minutes by default), expired tokens are never sent, failures
+    back off exponentially, and a `429` pauses every window (manual refreshes
+    included) for as long as the server asks.
+  - The item appears only when Claude Code is signed in with a claude.ai plan.
+    More information also shows the plan (e.g. "Max 20x") and extra-usage spend.
+- Add the `codexUsage.claude.enabled` and
+  `codexUsage.claude.refreshIntervalSeconds` settings, and the
+  **Show Claude Code Usage** / **Show Claude Code More Information** commands.
+  **Refresh** now refreshes both providers.
+- Give each status bar item its own id, so either one can be hidden from the
+  status bar's context menu.
+- The empty-state tooltip now includes the reason when there is one.
+
 ## 0.2.4
 
 - Add `codexUsage.showRemaining` setting to show remaining usage

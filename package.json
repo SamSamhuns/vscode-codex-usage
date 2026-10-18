@@ -1,8 +1,8 @@
 {
   "name": "vscode-codex-usage",
   "displayName": "Codex Usage",
-  "description": "Show Codex CLI usage in the VS Code status bar.",
-  "version": "0.2.4",
+  "description": "Show Codex CLI and Claude Code usage side by side in the VS Code status bar.",
+  "version": "0.3.0",
   "publisher": "ganymede404",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -32,6 +32,13 @@
           "fontPath": "./icons/codex-icon.woff",
           "fontCharacter": "\\E900"
         }
+      },
+      "claude-logo": {
+        "description": "Claude logo",
+        "default": {
+          "fontPath": "./icons/claude-icon.woff",
+          "fontCharacter": "\\E900"
+        }
       }
     },
     "commands": [
@@ -50,6 +57,14 @@
       {
         "command": "codexUsage.openSessionsFolder",
         "title": "Codex Usage: Open Sessions Folder"
+      },
+      {
+        "command": "codexUsage.showClaudeUsage",
+        "title": "Codex Usage: Show Claude Code Usage"
+      },
+      {
+        "command": "codexUsage.showClaudeMoreInformation",
+        "title": "Codex Usage: Show Claude Code More Information"
       }
     ],
     "configuration": {
@@ -84,7 +99,7 @@
             "Show the usage item on the right side of the status bar."
           ],
           "default": "left",
-          "description": "Which side of the status bar the Codex usage item appears on."
+          "description": "Which side of the status bar the usage items appear on."
         },
         "codexUsage.codexHome": {
           "type": "string",
@@ -95,13 +110,24 @@
           "type": "number",
           "default": 60,
           "minimum": 5,
-          "description": "How often to re-read the latest rollout file, in seconds."
+          "markdownDescription": "How often to refresh the status bar, in seconds. Codex usage is re-read every time; Claude Code usage is re-fetched only as often as `#codexUsage.claude.refreshIntervalSeconds#` allows."
         },
         "codexUsage.lookbackDays": {
           "type": "number",
           "default": 7,
           "minimum": 1,
           "description": "How many days back to search for rollout files."
+        },
+        "codexUsage.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Claude Code's 5-hour and weekly plan usage next to Codex usage. The item appears only when Claude Code is signed in with a claude.ai plan (Pro, Max, Team, or Enterprise)."
+        },
+        "codexUsage.claude.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 60,
+          "markdownDescription": "Minimum time between Claude Code usage fetches, in seconds. Anthropic's usage endpoint is rate limited and shared with Claude Code's own `/usage`, so one fetch is shared by all VS Code windows and only happens while a window is focused."
         }
       }
     }

@@ -1,23 +1,59 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { readLatestSnapshot } from "./codexReader";
 import { CodexApiError, readApiSnapshot } from "./codexApi";
 import { isLoggedIn } from "./codexAuth";
+import { ClaudeUsageResult, ClaudeUsageService } from "./claudeUsage";
 import {
   createMoreInformationItems,
   createUsageSummaryItems,
   isMoreInformationItem,
+  STATUS_BAR_PRIORITY,
   StatusBar,
   StatusBarSide,
+  UsageProvider,
 } from "./statusBar";
 import { setShowRemaining } from "./format";
 import { Snapshot } from "./types";
 
 type UsageSource = "auto" | "api" | "rollout";
 
+const CODEX: UsageProvider = {
+  id: "codexUsage.codex",
+  title: "Codex Usage",
+  name: "Codex",
+  icon: "$(codex-logo)",
+  showUsageCommand: "codexUsage.showUsage",
+  moreInformationCommand: "codexUsage.showMoreInformation",
+  emptyTooltip: "No Codex usage data. Start a Codex session or run 'codex login'.",
+  includeAdditionalLimits: false,
+};
+
+const CLAUDE: UsageProvider = {
+  id: "codexUsage.claude",
+  title: "Claude Code Usage",
+  name: "Claude",
+  icon: "$(claude-logo)",
+  showUsageCommand: "codexUsage.showClaudeUsage",
+  moreInformationCommand: "codexUsage.showClaudeMoreInformation",
+  emptyTooltip:
+    "No Claude Code usage fetched yet. It is fetched while a VS Code window is focused.",
+  // Claude reports per-model weekly caps (e.g. Opus) as rows of their own, and
+  // they can be the binding limit, so chart them with the 5h and weekly windows.
+  includeAdditionalLimits: true,
+};
+
+// The Claude Code item sits immediately right of the Codex item.
+const CLAUDE_PRIORITY = STATUS_BAR_PRIORITY - 0.01;
+const MIN_CLAUDE_INTERVAL_SECONDS = 60;
+
 let timer: NodeJS.Timeout | undefined;
 let statusBar: StatusBar | undefined;
+let claudeBar: StatusBar | undefined;
+let claudeService: ClaudeUsageService | undefined;
 let lastSnapshot: Snapshot | null = null;
 let lastNote: string | undefined;
+let lastClaude: ClaudeUsageResult | null = null;
 
 function getConfig() {
   const c = vscode.workspace.getConfiguration("codexUsage");
@@ -31,10 +67,14 @@ function getConfig() {
     compact: c.get<boolean>("compactStatusBar", false),
     showRemaining: c.get<boolean>("showRemaining", false),
     statusBarAlignment: (side === "right" ? "right" : "left") as StatusBarSide,
+    claudeEnabled: c.get<boolean>("claude.enabled", true),
+    claudeRefreshIntervalSeconds: c.get<number>("claude.refreshIntervalSeconds", 300),
   };
 }
 
-async function readRollout(cfg: ReturnType<typeof getConfig>): Promise<Snapshot | null> {
+type Config = ReturnType<typeof getConfig>;
+
+async function readRollout(cfg: Config): Promise<Snapshot | null> {
   return readLatestSnapshot({
     codexHome: cfg.codexHome,
     lookbackDays: cfg.lookbackDays,
@@ -44,9 +84,7 @@ async function readRollout(cfg: ReturnType<typeof getConfig>): Promise<Snapshot 
 // Resolve a snapshot according to the configured source. Online modes fall back
 // to the local rollout files whenever the live query can't run (not logged in,
 // expired token, offline), so the status bar keeps working.
-async function resolveSnapshot(
-  cfg: ReturnType<typeof getConfig>,
-): Promise<{ snapshot: Snapshot | null; note?: string }> {
+async function resolveSnapshot(cfg: Config): Promise<{ snapshot: Snapshot | null; note?: string }> {
   const wantApi = cfg.source === "api" || (cfg.source === "auto" && isLoggedIn(cfg.codexHome));
   if (!wantApi) {
     return { snapshot: await readRollout(cfg) };
@@ -65,10 +103,8 @@ async function resolveSnapshot(
   }
 }
 
-async function refresh() {
+async function refreshCodex(cfg: Config) {
   if (!statusBar) return;
-  const cfg = getConfig();
-  setShowRemaining(cfg.showRemaining);
   statusBar.ensureAlignment(cfg.statusBarAlignment);
   try {
     const result = await resolveSnapshot(cfg);
@@ -82,11 +118,46 @@ async function refresh() {
   statusBar.update(lastSnapshot, { compact: cfg.compact, note: lastNote });
 }
 
+// Cheap on most ticks: the service re-reads the usage state shared by all
+// windows and only goes to the network when that is stale and this window is
+// focused (or the user asked for a refresh).
+async function refreshClaude(cfg: Config = getConfig(), force = false) {
+  if (!claudeBar || !claudeService) return;
+  claudeBar.ensureAlignment(cfg.statusBarAlignment);
+  if (!cfg.claudeEnabled) {
+    lastClaude = null;
+    claudeBar.hide();
+    return;
+  }
+
+  try {
+    lastClaude = await claudeService.refresh({
+      force,
+      focused: vscode.window.state.focused,
+      intervalMs: Math.max(MIN_CLAUDE_INTERVAL_SECONDS, cfg.claudeRefreshIntervalSeconds) * 1000,
+    });
+  } catch (err) {
+    console.error("[codex-usage] Claude usage read failed:", err);
+  }
+
+  if (!lastClaude?.loggedIn) {
+    claudeBar.hide();
+    return;
+  }
+  claudeBar.update(lastClaude.snapshot, { compact: cfg.compact, note: lastClaude.note });
+}
+
+async function refresh(force = false) {
+  const cfg = getConfig();
+  setShowRemaining(cfg.showRemaining);
+  await Promise.all([refreshCodex(cfg), refreshClaude(cfg, force)]);
+}
+
 function restartTimer() {
   if (timer) clearInterval(timer);
   const cfg = getConfig();
   const intervalMs = Math.max(5, cfg.refreshIntervalSeconds) * 1000;
-  timer = setInterval(refresh, intervalMs);
+  timer = setInterval(() => void refresh(), intervalMs);
 }
 
 async function showUsage() {
@@ -97,7 +168,7 @@ async function showUsage() {
     return;
   }
 
-  const selected = await vscode.window.showQuickPick(createUsageSummaryItems(lastSnapshot), {
+  const selected = await vscode.window.showQuickPick(createUsageSummaryItems(lastSnapshot, CODEX), {
     title: "Codex Usage",
     placeHolder: "Current session and weekly rate limits",
   });
@@ -120,15 +191,66 @@ async function showMoreInformation() {
   });
 }
 
+// Why there is no Claude Code usage to show.
+function claudeUnavailableMessage(): string {
+  if (!getConfig().claudeEnabled) {
+    return "Claude Code usage is turned off (codexUsage.claude.enabled).";
+  }
+  if (lastClaude && !lastClaude.loggedIn) {
+    return "No Claude Code login found. Sign in to Claude Code with a claude.ai Pro, Max, Team, or Enterprise plan.";
+  }
+  return (
+    lastClaude?.note ??
+    "Claude Code usage hasn't been fetched yet. It is fetched while a VS Code window is focused."
+  );
+}
+
+async function showClaudeUsage() {
+  const snapshot = lastClaude?.snapshot;
+  if (!snapshot) {
+    await vscode.window.showInformationMessage(claudeUnavailableMessage());
+    return;
+  }
+
+  const selected = await vscode.window.showQuickPick(createUsageSummaryItems(snapshot, CLAUDE), {
+    title: "Claude Code Usage",
+    placeHolder: "Current session and weekly plan limits",
+  });
+  if (isMoreInformationItem(selected)) {
+    await showClaudeMoreInformation();
+  }
+}
+
+async function showClaudeMoreInformation() {
+  const snapshot = lastClaude?.snapshot;
+  if (!snapshot) {
+    await vscode.window.showInformationMessage(claudeUnavailableMessage());
+    return;
+  }
+
+  await vscode.window.showQuickPick(createMoreInformationItems(snapshot, lastClaude?.note), {
+    title: "Claude Code Usage - More Information",
+    placeHolder: "Captured time, source, plan, and limit windows",
+  });
+}
+
 export function activate(context: vscode.ExtensionContext) {
-  statusBar = new StatusBar(getConfig().statusBarAlignment);
-  context.subscriptions.push(statusBar);
+  const cfg = getConfig();
+  statusBar = new StatusBar(CODEX, cfg.statusBarAlignment);
+  claudeBar = new StatusBar(CLAUDE, cfg.statusBarAlignment, CLAUDE_PRIORITY);
+  // Global storage is shared by every window, so one fetch serves them all.
+  claudeService = new ClaudeUsageService(
+    path.join(context.globalStorageUri.fsPath, "claude-usage.json"),
+  );
+  context.subscriptions.push(statusBar, claudeBar);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("codexUsage.refresh", refresh),
+    vscode.commands.registerCommand("codexUsage.refresh", () => refresh(true)),
     vscode.commands.registerCommand("codexUsage.showUsage", showUsage),
     vscode.commands.registerCommand("codexUsage.showDetails", showUsage),
     vscode.commands.registerCommand("codexUsage.showMoreInformation", showMoreInformation),
+    vscode.commands.registerCommand("codexUsage.showClaudeUsage", showClaudeUsage),
+    vscode.commands.registerCommand("codexUsage.showClaudeMoreInformation", showClaudeMoreInformation),
     vscode.commands.registerCommand("codexUsage.openSessionsFolder", async () => {
       const cfg = getConfig();
       const { resolveCodexHome } = await import("./codexReader");
@@ -144,6 +266,11 @@ export function activate(context: vscode.ExtensionContext) {
       restartTimer();
       void refresh();
     }),
+    // Claude usage is only fetched by a focused window, so catch up as soon as
+    // one gains focus instead of waiting for the next tick.
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) void refreshClaude();
+    }),
   );
 
   restartTimer();
@@ -153,4 +280,5 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
   if (timer) clearInterval(timer);
   statusBar?.dispose();
+  claudeBar?.dispose();
 }
